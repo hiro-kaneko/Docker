@@ -1,0 +1,80 @@
+# docker build -f DockerFile-TruffleRemix ./ -t tr-remix:1.3
+FROM ubuntu:18.04
+
+# ENV DEBIAN_FRONTEND noninteractive
+# ENV DEBCONF_NOWARNINGS yes
+
+SHELL ["/bin/bash", "-c"]
+
+# 理研を利用
+RUN sed -i.bak -e "s%http://[^ ]\+%http://ftp.riken.go.jp/Linux/ubuntu/%g" /etc/apt/sources.list
+
+# aptのアップデート
+RUN apt-get update
+
+# 基本ライブラリインストール
+RUN apt install -y git
+RUN apt install -y vim
+RUN apt install -y curl
+
+## Remix ビルド用
+RUN apt install -y gcc libssl-dev
+RUN apt install -y python2.7
+RUN apt install -y python-pip
+#RUN apt install -y python3     #不要
+#RUN apt install -y python3-pip #不要
+RUN apt install -y wget
+
+# nodejsインストール
+ENV NVM_DIR /usr/local/nvm
+ENV NODE_VERSION 10.15.3
+RUN curl --silent -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.2/install.sh | bash
+
+# install node and npm
+RUN source $NVM_DIR/nvm.sh \
+    && nvm install $NODE_VERSION \
+    && nvm alias default $NODE_VERSION \
+    && nvm use $NODE_VERSION
+
+ENV NODE_PATH $NVM_DIR/v$NODE_VERSION/lib/node_modules
+ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
+
+RUN source ~/.bashrc
+RUN npm update
+
+# node権限対策
+RUN npm config set user 0
+RUN npm config set unsafe-perm true
+
+# truffle
+RUN npm install -g truffle
+
+# truffle unbox用
+RUN npm install -g node-gyp
+RUN npm install -g nan
+RUN echo 'export NODE_PATH="$(npm root -g)"' >> ~/.bashrc
+
+# Remix
+RUN mkdir apl
+RUN cd apl
+
+WORKDIR /apl
+RUN git clone https://github.com/ethereum/remix-ide.git
+
+WORKDIR /apl/remix-ide
+RUN npm install
+
+RUN sed -i s/127.0.0.1/0.0.0.0/g ./node_modules/remixd/src/websocket.js
+RUN npm run-script build
+
+# firebase console
+RUN npm install -g firebase-tools
+
+# React Hot-Reload用
+ENV CHOKIDAR_USEPOLLING=true
+
+# infra利用に追加
+RUN npm install -g truffle-hdwallet-provider
+
+# ログイン時のパスをルートに変更
+WORKDIR /
